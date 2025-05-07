@@ -11,7 +11,7 @@
   "author": "Jannes Harms",
   "license": "MIT",
   "dependencies": {
+    "cors": "^2.8.5",
     "node-fetch": "^3.3.2"
   }
 }
-

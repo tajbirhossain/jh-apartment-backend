@@ -1,20 +1,20 @@
 import fetch from 'node-fetch';
+import Cors from 'cors';
+import initMiddleware from '../../lib/init-middleware';
+
+const cors = initMiddleware(
+  Cors({
+    origin: ['https://jh-apartments.de', 'http://127.0.0.1:5500'],
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+  })
+);
 
 export default async function handler(req, res) {
+  await cors(req, res);
+
   const { pathname } = new URL(req.url, `http://${req.headers.host}`);
-
-  const allowedOrigins = ['https://jh-apartments.de', 'http://127.0.0.1:5500'];
-  const origin = req.headers.origin;
-
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
 
   if (pathname.endsWith('/health')) {
     return res.status(200).json({ status: 'ok' });
