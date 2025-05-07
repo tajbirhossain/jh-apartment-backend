@@ -33,6 +33,7 @@ export default async function handler(req, res) {
     const response = await fetch("https://login.smoobu.com/api/reservations", {
       method: "POST",
       headers: {
+        'Api-Key': process.env.SMOOBU_API_TOKEN,
         'Authorization': `Bearer ${process.env.SMOOBU_API_TOKEN}`,
         'Content-Type': 'application/json'
       },

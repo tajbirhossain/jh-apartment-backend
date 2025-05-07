@@ -28,6 +28,7 @@ export default async function handler(req, res) {
   try {
     const response = await fetch('https://login.smoobu.com/api/apartments', {
       headers: {
+        'Api-Key': process.env.SMOOBU_API_TOKEN,
         'Authorization': `Bearer ${process.env.SMOOBU_API_TOKEN}`,
         'Content-Type': 'application/json'
       }
