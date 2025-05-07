@@ -1,0 +1,17 @@
+{
+  "name": "smoobu-proxy",
+  "version": "1.0.0",
+  "description": "Smoobu API Proxy",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "keywords": [],
+  "author": "Jannes Harms",
+  "license": "MIT",
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  }
+}
+
