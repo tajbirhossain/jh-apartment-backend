@@ -24,7 +24,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-  
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Nur POST erlaubt" });
   }
@@ -33,22 +33,25 @@ export default async function handler(req, res) {
     const response = await fetch("https://login.smoobu.com/api/availability", {
       method: "POST",
       headers: {
-        'Api-Key': process.env.SMOOBU_API_TOKEN,
         'Authorization': `Bearer ${process.env.SMOOBU_API_TOKEN}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(req.body)
     });
 
-    const text = await response.text();
-    try {
-      const json = JSON.parse(text);
-      res.status(response.status).json(json);
-    } catch {
-      res.status(response.status).json({ raw: text });
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`API Error: ${response.status}`, errorText);
+      return res.status(response.status).json({
+        error: `API Error: ${response.status}`,
+        details: errorText
+      });
     }
+
+    const data = await response.json();
+    return res.status(200).json(data);
   } catch (error) {
-    res.status(500).json({ error: "Fehler beim Abrufen der Verfügbarkeit", details: error.message });
+    console.error("Availability check error:", error);
+    return res.status(500).json({ error: "Fehler beim Abrufen der Verfügbarkeit", details: error.message });
   }
 }
-
