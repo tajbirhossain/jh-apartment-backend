@@ -4,7 +4,7 @@ import initMiddleware from '../../lib/init-middleware';
 
 const cors = initMiddleware(
   Cors({
-    origin: ['https://jh-apartments.de', 'http://127.0.0.1:5500'],
+    origin: '*',
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
