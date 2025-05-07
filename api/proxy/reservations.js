@@ -34,6 +34,7 @@ export default async function handler(req, res) {
       method: "POST",
       headers: {
         'Api-Key': process.env.SMOOBU_API_TOKEN,
+        'Authorization': `Bearer ${process.env.SMOOBU_API_TOKEN}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(req.body)
