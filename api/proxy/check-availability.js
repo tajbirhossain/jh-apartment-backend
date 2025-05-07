@@ -30,7 +30,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    res.json(req.body)
     const response = await fetch("https://login.smoobu.com/booking/checkApartmentAvailability", {
       method: "POST",
       headers: {
