@@ -1,20 +1,31 @@
 import fetch from 'node-fetch';
-import Cors from 'cors';
-import initMiddleware from '../../lib/init-middleware';
+import cors from 'cors';
 
-const cors = initMiddleware(
-  Cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,
-  })
-);
+const corsMiddleware = cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+});
+
+const runMiddleware = (req, res, fn) => {
+  return new Promise((resolve, reject) => {
+    fn(req, res, (result) => {
+      if (result instanceof Error) {
+        return reject(result);
+      }
+      return resolve(result);
+    });
+  });
+};
 
 export default async function handler(req, res) {
-  await cors(req, res);
+  await runMiddleware(req, res, corsMiddleware);
 
   const { pathname } = new URL(req.url, `http://${req.headers.host}`);
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
 
   if (pathname.endsWith('/health')) {
     return res.status(200).json({ status: 'ok' });
