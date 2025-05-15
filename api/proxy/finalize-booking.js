@@ -1,8 +1,31 @@
 import Stripe from 'stripe';
 import fetch from 'node-fetch';
+import cors from 'cors';
 const stripe = new Stripe(process.env.STRIPE_SECRET);
 
+const corsMiddleware = cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Api-Key']
+});
+
+const runMiddleware = (req, res, fn) => {
+    return new Promise((resolve, reject) => {
+        fn(req, res, (result) => {
+            if (result instanceof Error) {
+                return reject(result);
+            }
+            return resolve(result);
+        });
+    });
+};
+
 export default async function handler(req, res) {
+    await runMiddleware(req, res, corsMiddleware);
+
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
     const { paymentId, method } = req.body;
 
     if (method === 'stripe') {
