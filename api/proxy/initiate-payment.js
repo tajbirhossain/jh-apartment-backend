@@ -2,11 +2,16 @@ import Stripe from 'stripe';
 import fetch from 'node-fetch';
 import cors from 'cors';
 
+
 const corsMiddleware = cors({
-    origin: '*',
+    origin: true,
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Api-Key']
+    allowedHeaders: ['Content-Type', 'Authorization', 'Api-Key'],
+    credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204
 });
+
 
 const runMiddleware = (req, res, fn) => {
     return new Promise((resolve, reject) => {
@@ -28,7 +33,7 @@ export default async function handler(req, res) {
     await runMiddleware(req, res, corsMiddleware);
 
     if (req.method === 'OPTIONS') {
-        return res.status(200).end();
+        return res.status(204).end();
     }
 
     if (req.method !== 'POST') {
