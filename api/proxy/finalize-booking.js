@@ -1,74 +1,208 @@
 import Stripe from 'stripe';
 import fetch from 'node-fetch';
-import cors from 'cors';
-const stripe = new Stripe(process.env.STRIPE_SECRET);
 
-const corsMiddleware = cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Api-Key']
-});
+// Reuse the same CORS handler for consistency
+const handleCors = (req, res) => {
+    // Set CORS headers explicitly for all responses
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Api-Key');
 
-const runMiddleware = (req, res, fn) => {
-    return new Promise((resolve, reject) => {
-        fn(req, res, (result) => {
-            if (result instanceof Error) {
-                return reject(result);
-            }
-            return resolve(result);
-        });
-    });
+    // Handle OPTIONS requests immediately
+    if (req.method === 'OPTIONS') {
+        res.status(200).end();
+        return true; // Return true to indicate we've handled the request
+    }
+    return false; // Return false to continue processing
 };
 
-export default async function handler(req, res) {
-    await runMiddleware(req, res, corsMiddleware);
-
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
-    const { paymentId, method } = req.body;
-
-    if (method === 'stripe') {
-        const pi = await stripe.paymentIntents.retrieve(paymentId);
-        if (pi.status !== 'succeeded') {
-            return res.json({ success: false, error: 'Zahlung nicht abgeschlossen' });
-        }
+// Initialize Stripe with proper error handling
+let stripe;
+try {
+    if (process.env.STRIPE_SECRET) {
+        stripe = new Stripe(process.env.STRIPE_SECRET);
     } else {
-        const auth = Buffer.from(`${process.env.PP_CLIENT}:${process.env.PP_SECRET}`)
-            .toString('base64');
-        const captureRes = await fetch(
-            `https://api.paypal.com/v2/checkout/orders/${paymentId}/capture`,
-            {
-                method: 'POST', headers: {
-                    'Authorization': `Basic ${auth}`,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
-        const captureData = await captureRes.json();
-        if (captureData.status !== 'COMPLETED') {
-            return res.json({ success: false, error: 'PayPal-Zahlung fehlgeschlagen' });
-        }
+        console.warn('STRIPE_SECRET environment variable is missing');
+    }
+} catch (error) {
+    console.error('Failed to initialize Stripe:', error);
+}
+
+// PayPal base URL with fallback
+const PAYPAL_BASE = process.env.NODE_ENV === 'production'
+    ? 'https://api.paypal.com'
+    : 'https://api.sandbox.paypal.com';
+
+export default async function handler(req, res) {
+    // Always handle CORS first
+    if (handleCors(req, res)) {
+        return; // Return early for OPTIONS requests
+    }
+
+    // Log request to help diagnose issues
+    console.log(`[finalize-booking] Request method: ${req.method}, URL: ${req.url}`);
+
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
     try {
-        const bookingPayload = {/* reconstruct from metadata or session */ };
-        const smoobuRes = await fetch("https://login.smoobu.com/api/reservations", {
-            method: "POST",
-            headers: {
-                'Api-Key': process.env.SMOOBU_API_TOKEN,
-                'Authorization': `Bearer ${process.env.SMOOBU_API_TOKEN}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(bookingPayload)
-        });
-        const data = await smoobuRes.json();
-        if (data.id) {
-            return res.json({ success: true, reservationId: data.id });
+        const { paymentId, method } = req.body;
+        console.log('[finalize-booking] Request body:', { paymentId, method });
+
+        if (!paymentId || !method) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required parameters: paymentId and method'
+            });
+        }
+
+        let paymentVerified = false;
+
+        if (method === 'stripe') {
+            if (!stripe) {
+                return res.status(500).json({
+                    success: false,
+                    error: 'Stripe is not configured'
+                });
+            }
+
+            const pi = await stripe.paymentIntents.retrieve(paymentId);
+            console.log('[finalize-booking] Stripe payment status:', pi.status);
+
+            if (pi.status !== 'succeeded') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Zahlung nicht abgeschlossen'
+                });
+            }
+
+            // Extract booking details from metadata for Smoobu
+            const bookingPayload = {
+                arrivalDate: pi.metadata.arrivalDate,
+                departureDate: pi.metadata.departureDate,
+                adults: parseInt(pi.metadata.adults, 10),
+                children: parseInt(pi.metadata.children || '0', 10),
+                // Add other required fields for Smoobu
+            };
+
+            paymentVerified = true;
+        } else if (method === 'paypal') {
+            if (!process.env.PP_CLIENT || !process.env.PP_SECRET) {
+                return res.status(500).json({
+                    success: false,
+                    error: 'PayPal is not configured'
+                });
+            }
+
+            const auth = Buffer.from(`${process.env.PP_CLIENT}:${process.env.PP_SECRET}`)
+                .toString('base64');
+
+            const captureRes = await fetch(
+                `${PAYPAL_BASE}/v2/checkout/orders/${paymentId}/capture`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Basic ${auth}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+
+            const captureData = await captureRes.json();
+            console.log('[finalize-booking] PayPal capture status:', captureData.status);
+
+            if (captureData.status !== 'COMPLETED') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'PayPal-Zahlung fehlgeschlagen'
+                });
+            }
+
+            // Extract purchase unit custom_id for booking details
+            const purchaseUnit = captureData.purchase_units?.[0];
+            let bookingDetails = {};
+
+            try {
+                if (purchaseUnit?.custom_id) {
+                    bookingDetails = JSON.parse(purchaseUnit.custom_id);
+                }
+            } catch (error) {
+                console.error('[finalize-booking] Error parsing custom_id:', error);
+            }
+
+            const bookingPayload = {
+                arrivalDate: bookingDetails.arrivalDate,
+                departureDate: bookingDetails.departureDate,
+                adults: bookingDetails.adults,
+                children: bookingDetails.children || 0,
+                // Add other required fields for Smoobu
+            };
+
+            paymentVerified = true;
         } else {
-            throw new Error(data.message || 'Reservierung fehlgeschlagen');
+            return res.status(400).json({
+                success: false,
+                error: 'Unknown payment method'
+            });
+        }
+
+        if (paymentVerified) {
+            // In a real implementation, you'd construct the bookingPayload properly
+            // This is just a placeholder based on your code
+            const bookingPayload = {
+                // Basic fields (this would be constructed from actual data in production)
+                apartmentId: process.env.SMOOBU_APARTMENT_ID || '12345',
+                channel: 'website',
+                status: 'NEW',
+                // Additional fields would be added here
+            };
+
+            if (!process.env.SMOOBU_API_TOKEN) {
+                return res.status(500).json({
+                    success: false,
+                    error: 'Smoobu API is not configured'
+                });
+            }
+
+            console.log('[finalize-booking] Creating Smoobu reservation with payload:', bookingPayload);
+
+            const smoobuRes = await fetch("https://login.smoobu.com/api/reservations", {
+                method: "POST",
+                headers: {
+                    'Api-Key': process.env.SMOOBU_API_TOKEN,
+                    'Authorization': `Bearer ${process.env.SMOOBU_API_TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(bookingPayload)
+            });
+
+            if (!smoobuRes.ok) {
+                const errorText = await smoobuRes.text();
+                console.error('[finalize-booking] Smoobu API error:', errorText);
+                return res.status(400).json({
+                    success: false,
+                    error: `Smoobu API error: ${errorText}`
+                });
+            }
+
+            const data = await smoobuRes.json();
+            console.log('[finalize-booking] Smoobu reservation created:', data);
+
+            if (data.id) {
+                return res.status(200).json({
+                    success: true,
+                    reservationId: data.id
+                });
+            } else {
+                throw new Error(data.message || 'Reservierung fehlgeschlagen');
+            }
         }
     } catch (error) {
-        return res.json({ success: false, error: error.message });
+        console.error('[finalize-booking] Error:', error);
+        return res.status(500).json({
+            success: false,
+            error: error.message || 'Server error'
+        });
     }
 }
