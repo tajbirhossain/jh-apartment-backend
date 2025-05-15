@@ -25,14 +25,11 @@ const PAYPAL_BASE = process.env.NODE_ENV === 'production'
     : 'https://api.sandbox.paypal.com';
 
 export default async function handler(req, res) {
+    await runMiddleware(req, res, corsMiddleware);
+
     if (req.method === 'OPTIONS') {
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Api-Key');
         return res.status(200).end();
     }
-
-    await runMiddleware(req, res, corsMiddleware);
 
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method Not Allowed' });
