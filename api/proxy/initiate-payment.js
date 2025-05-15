@@ -1,5 +1,23 @@
 import Stripe from 'stripe';
 import fetch from 'node-fetch';
+import cors from 'cors';
+
+const corsMiddleware = cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Api-Key']
+});
+
+const runMiddleware = (req, res, fn) => {
+    return new Promise((resolve, reject) => {
+        fn(req, res, (result) => {
+            if (result instanceof Error) {
+                return reject(result);
+            }
+            return resolve(result);
+        });
+    });
+};
 
 const stripe = new Stripe(process.env.STRIPE_SECRET, { apiVersion: '2022-11-15' });
 const PAYPAL_BASE = process.env.NODE_ENV === 'production'
@@ -7,6 +25,8 @@ const PAYPAL_BASE = process.env.NODE_ENV === 'production'
     : 'https://api.sandbox.paypal.com';
 
 export default async function handler(req, res) {
+    await runMiddleware(req, res, corsMiddleware);
+
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
