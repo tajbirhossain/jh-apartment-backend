@@ -27,6 +27,11 @@ const PAYPAL_BASE = process.env.NODE_ENV === 'production'
 export default async function handler(req, res) {
     await runMiddleware(req, res, corsMiddleware);
 
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+
+
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
