@@ -80,7 +80,7 @@ export default async function handler(req, res) {
                 departureDate: pi.metadata.departureDate,
                 adults: parseInt(pi.metadata.adults, 10),
                 children: parseInt(pi.metadata.children || '0', 10),
-                // Add other required fields for Smoobu
+                
             };
 
             paymentVerified = true;
@@ -133,7 +133,7 @@ export default async function handler(req, res) {
                 departureDate: bookingDetails.departureDate,
                 adults: bookingDetails.adults,
                 children: bookingDetails.children || 0,
-                // Add other required fields for Smoobu
+                
             };
 
             paymentVerified = true;
@@ -145,14 +145,11 @@ export default async function handler(req, res) {
         }
 
         if (paymentVerified) {
-            // In a real implementation, you'd construct the bookingPayload properly
-            // This is just a placeholder based on your code
             const bookingPayload = {
-                // Basic fields (this would be constructed from actual data in production)
                 apartmentId: process.env.SMOOBU_APARTMENT_ID || '12345',
                 channel: 'website',
                 status: 'NEW',
-                // Additional fields would be added here
+                
             };
 
             if (!process.env.SMOOBU_API_TOKEN) {
