@@ -12,45 +12,37 @@ const handleCors = (req, res) => {
     return false
 }
 
-// Initialize Stripe if environment variable is available
 let stripe
 if (process.env.STRIPE_SECRET) {
     stripe = new Stripe(process.env.STRIPE_SECRET, { apiVersion: '2022-11-15' })
 }
 
-// PayPal API base URL based on environment
 const PAYPAL_BASE =
     process.env.NODE_ENV === 'production'
         ? 'https://api.paypal.com'
         : 'https://api.sandbox.paypal.com'
 
 export default async function handler(req, res) {
-    // Handle CORS preflight
     if (handleCors(req, res)) return
     
-    // Only allow POST method
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' })
 
     try {
-        // Extract required data from request body
         const { 
             method, arrivalDate, departureDate, adults, children = 0,
             apartmentId, firstName, lastName, email, phone
         } = req.body
 
-        // Validate required fields
         if (!method || !arrivalDate || !departureDate || typeof adults !== 'number') {
             return res.status(400).json({ error: 'Ungültige Buchungsdaten' })
         }
 
-        // Calculate booking amount
         const nights = Math.ceil((new Date(departureDate) - new Date(arrivalDate)) / 86400000)
-        const amount = nights * 10000 // 100 EUR per night in cents
+        const amount = nights * 10000
         if (amount <= 0) {
             return res.status(400).json({ error: 'Ungültiger Gesamtpreis' })
         }
 
-        // Store full booking data for later use
         const bookingData = {
             arrivalDate,
             departureDate,
@@ -63,7 +55,6 @@ export default async function handler(req, res) {
             phone
         }
 
-        // Handle Stripe payment
         if (method === 'stripe') {
             if (!stripe) {
                 return res.status(500).json({ error: 'Stripe is not configured' })
@@ -82,21 +73,16 @@ export default async function handler(req, res) {
             })
         }
 
-        // Handle PayPal payment
         if (method === 'paypal') {
-            // Check if PayPal credentials are configured
             if (!process.env.PP_CLIENT || !process.env.PP_SECRET) {
                 console.error('PayPal credentials missing');
                 return res.status(500).json({ error: 'PayPal is not configured' })
             }
 
-            // Create Basic Auth header for PayPal API
             const auth = Buffer.from(`${process.env.PP_CLIENT}:${process.env.PP_SECRET}`).toString('base64')
             
-            // Set correct application URLs
             const appUrl = process.env.APP_URL || 'http://localhost:3000';
             
-            // Create PayPal order
             try {
                 const orderRes = await fetch(`${PAYPAL_BASE}/v2/checkout/orders`, {
                     method: 'POST',
@@ -122,7 +108,6 @@ export default async function handler(req, res) {
                     }),
                 })
 
-                // Check for API errors
                 if (!orderRes.ok) {
                     const errorText = await orderRes.text();
                     console.error('PayPal API error:', errorText);
@@ -131,7 +116,7 @@ export default async function handler(req, res) {
                     try {
                         errorData = JSON.parse(errorText);
                     } catch (e) {
-                        // Ignore parsing error
+                        
                     }
                     
                     const msg = errorData.message || 'PayPal: Order creation failed';
