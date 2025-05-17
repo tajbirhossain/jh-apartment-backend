@@ -1,22 +1,19 @@
 import Stripe from 'stripe';
 import fetch from 'node-fetch';
 
-// Reuse the same CORS handler for consistency
 const handleCors = (req, res) => {
-    // Set CORS headers explicitly for all responses
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Api-Key');
 
-    // Handle OPTIONS requests immediately
     if (req.method === 'OPTIONS') {
         res.status(200).end();
-        return true; // Return true to indicate we've handled the request
+        return true;
     }
-    return false; // Return false to continue processing
+    return false;
 };
 
-// Initialize Stripe with proper error handling
+
 let stripe;
 try {
     if (process.env.STRIPE_SECRET) {
@@ -28,18 +25,18 @@ try {
     console.error('Failed to initialize Stripe:', error);
 }
 
-// PayPal base URL with fallback
+
 const PAYPAL_BASE = process.env.NODE_ENV === 'production'
     ? 'https://api.paypal.com'
     : 'https://api.sandbox.paypal.com';
 
 export default async function handler(req, res) {
-    // Always handle CORS first
+
     if (handleCors(req, res)) {
-        return; // Return early for OPTIONS requests
+        return;
     }
 
-    // Log request to help diagnose issues
+
     console.log(`[finalize-booking] Request method: ${req.method}, URL: ${req.url}`);
 
     if (req.method !== 'POST') {
@@ -77,7 +74,7 @@ export default async function handler(req, res) {
                 });
             }
 
-            // Extract booking details from metadata for Smoobu
+
             const bookingPayload = {
                 arrivalDate: pi.metadata.arrivalDate,
                 departureDate: pi.metadata.departureDate,
@@ -119,7 +116,7 @@ export default async function handler(req, res) {
                 });
             }
 
-            // Extract purchase unit custom_id for booking details
+
             const purchaseUnit = captureData.purchase_units?.[0];
             let bookingDetails = {};
 
