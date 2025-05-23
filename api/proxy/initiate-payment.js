@@ -27,7 +27,7 @@ async function getSmoobuPrice(apartmentId, arrivalDate, departureDate, adults, c
     try {
         // Use the same check-availability endpoint as the frontend
         const baseUrl = process.env.APP_URL || 'http://localhost:3000';
-        const priceRes = await fetch(`${baseUrl}/api/check-availability`, {
+        const priceRes = await fetch(`${baseUrl}/api/proxy/check-availability`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -191,7 +191,7 @@ export default async function handler(req, res) {
                             },
                         ],
                         application_context: {
-                            return_url: `${appUrl}/api/paypal-success`,
+                            return_url: `${appUrl}/api/proxy/paypal-success`,
                             cancel_url: `${appUrl}/booking-cancel`,
                         },
                     }),
