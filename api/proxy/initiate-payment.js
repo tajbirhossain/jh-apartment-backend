@@ -22,53 +22,66 @@ const PAYPAL_BASE =
         ? 'https://api.paypal.com'
         : 'https://api.sandbox.paypal.com'
 
-// Function to get price from Smoobu
+// Function to get price from Smoobu using the same API as frontend
 async function getSmoobuPrice(apartmentId, arrivalDate, departureDate, adults, children) {
-    if (!process.env.SMOOBU_API_TOKEN) {
-        throw new Error('Smoobu API is not configured')
-    }
-
     try {
-        // Get apartment details and pricing
-        const priceRes = await fetch(
-            `https://login.smoobu.com/api/apartments/${apartmentId}/calendar?start_date=${arrivalDate}&end_date=${departureDate}`,
-            {
-                headers: {
-                    'Api-Key': process.env.SMOOBU_API_TOKEN,
-                    'Authorization': `Bearer ${process.env.SMOOBU_API_TOKEN}`,
-                    'Content-Type': 'application/json'
-                }
-            }
-        )
+        // Use the same check-availability endpoint as the frontend
+        const baseUrl = process.env.APP_URL || 'http://localhost:3000';
+        const priceRes = await fetch(`${baseUrl}/api/check-availability`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                arrivalDate: arrivalDate,
+                departureDate: departureDate,
+                apartments: apartmentId.toString(), // Send specific apartment ID
+                guests: adults + children,
+                customerId: 981908
+            })
+        });
 
         if (!priceRes.ok) {
-            throw new Error('Failed to fetch pricing from Smoobu')
+            const errorText = await priceRes.text();
+            console.error('Check availability API error:', errorText);
+            throw new Error('Failed to fetch pricing from availability API');
         }
 
-        const priceData = await priceRes.json()
+        const priceData = await priceRes.json();
+        console.log('Price data received:', priceData);
 
-        // Calculate total price based on Smoobu's pricing
-        // This is a simplified calculation - you might need to adjust based on Smoobu's response structure
-        let totalPrice = 0
+        // Extract the total price from the response
+        // Adjust this based on your check-availability API response structure
+        let totalPrice = 0;
 
-        if (priceData.data && Array.isArray(priceData.data)) {
-            for (const day of priceData.data) {
-                if (day.price) {
-                    totalPrice += parseFloat(day.price)
-                }
+        // The response structure may vary, so let's handle common formats
+        if (priceData.price) {
+            totalPrice = parseFloat(priceData.price);
+        } else if (priceData.totalPrice) {
+            totalPrice = parseFloat(priceData.totalPrice);
+        } else if (priceData.data && priceData.data.price) {
+            totalPrice = parseFloat(priceData.data.price);
+        } else if (priceData.apartments && Array.isArray(priceData.apartments)) {
+            // If apartments array is returned, find the specific apartment
+            const apartment = priceData.apartments.find(apt =>
+                apt.id == apartmentId || apt.apartmentId == apartmentId
+            );
+            if (apartment && apartment.price) {
+                totalPrice = parseFloat(apartment.price);
             }
         }
 
-        // Add any additional fees based on guest count
-        // You might want to get this from Smoobu's apartment settings
-        const guestFee = Math.max(0, (adults + children - 2)) * 10 // Example: 10 EUR per extra guest
-        totalPrice += guestFee
+        if (totalPrice <= 0) {
+            console.error('Invalid price received from API:', priceData);
+            throw new Error('Invalid price received from availability API');
+        }
 
-        return Math.round(totalPrice * 100) // Convert to cents
+        // Convert to cents (assuming the API returns price in euros)
+        return Math.round(totalPrice * 100);
 
     } catch (error) {
-        console.error('Error fetching Smoobu price:', error)
-        throw new Error('Unable to calculate price from Smoobu')
+        console.error('Error fetching Smoobu price:', error);
+        throw new Error(`Unable to calculate price: ${error.message}`);
     }
 }
 
