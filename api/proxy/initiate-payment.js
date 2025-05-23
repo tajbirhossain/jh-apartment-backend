@@ -22,37 +22,109 @@ const PAYPAL_BASE =
         ? 'https://api.paypal.com'
         : 'https://api.sandbox.paypal.com'
 
+// Function to get price from Smoobu
+async function getSmoobuPrice(apartmentId, arrivalDate, departureDate, adults, children) {
+    if (!process.env.SMOOBU_API_TOKEN) {
+        throw new Error('Smoobu API is not configured')
+    }
+
+    try {
+        // Get apartment details and pricing
+        const priceRes = await fetch(
+            `https://login.smoobu.com/api/apartments/${apartmentId}/calendar?start_date=${arrivalDate}&end_date=${departureDate}`,
+            {
+                headers: {
+                    'Api-Key': process.env.SMOOBU_API_TOKEN,
+                    'Authorization': `Bearer ${process.env.SMOOBU_API_TOKEN}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        )
+
+        if (!priceRes.ok) {
+            throw new Error('Failed to fetch pricing from Smoobu')
+        }
+
+        const priceData = await priceRes.json()
+
+        // Calculate total price based on Smoobu's pricing
+        // This is a simplified calculation - you might need to adjust based on Smoobu's response structure
+        let totalPrice = 0
+
+        if (priceData.data && Array.isArray(priceData.data)) {
+            for (const day of priceData.data) {
+                if (day.price) {
+                    totalPrice += parseFloat(day.price)
+                }
+            }
+        }
+
+        // Add any additional fees based on guest count
+        // You might want to get this from Smoobu's apartment settings
+        const guestFee = Math.max(0, (adults + children - 2)) * 10 // Example: 10 EUR per extra guest
+        totalPrice += guestFee
+
+        return Math.round(totalPrice * 100) // Convert to cents
+
+    } catch (error) {
+        console.error('Error fetching Smoobu price:', error)
+        throw new Error('Unable to calculate price from Smoobu')
+    }
+}
+
 export default async function handler(req, res) {
     if (handleCors(req, res)) return
-    
+
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' })
 
     try {
-        const { 
+        const {
             method, arrivalDate, departureDate, adults, children = 0,
-            apartmentId, firstName, lastName, email, phone
+            apartmentId, firstName, lastName, email, phone, channelId
         } = req.body
 
-        if (!method || !arrivalDate || !departureDate || typeof adults !== 'number') {
-            return res.status(400).json({ error: 'Ungültige Buchungsdaten' })
+        // Validate required fields
+        if (!method || !arrivalDate || !departureDate || typeof adults !== 'number' ||
+            !apartmentId || !firstName || !lastName || !email || !phone) {
+            return res.status(400).json({ error: 'Missing required booking data' })
         }
 
-        const nights = Math.ceil((new Date(departureDate) - new Date(arrivalDate)) / 86400000)
-        const amount = nights * 10000
+        // Validate dates
+        const arrival = new Date(arrivalDate)
+        const departure = new Date(departureDate)
+        const nights = Math.ceil((departure - arrival) / 86400000)
+
+        if (nights <= 0) {
+            return res.status(400).json({ error: 'Invalid date range' })
+        }
+
+        // Get actual price from Smoobu
+        let amount
+        try {
+            amount = await getSmoobuPrice(apartmentId, arrivalDate, departureDate, adults, children)
+        } catch (error) {
+            console.error('Pricing error:', error)
+            return res.status(500).json({ error: 'Unable to calculate price' })
+        }
+
         if (amount <= 0) {
-            return res.status(400).json({ error: 'Ungültiger Gesamtpreis' })
+            return res.status(400).json({ error: 'Invalid total price' })
         }
 
+        // Store all booking data for later use
         const bookingData = {
             arrivalDate,
             departureDate,
             adults: adults.toString(),
             children: children.toString(),
-            apartmentId,
+            apartmentId: apartmentId.toString(),
             firstName,
             lastName,
             email,
-            phone
+            phone,
+            channelId: channelId ? channelId.toString() : '70', // Default to 70 if not provided
+            totalAmount: amount.toString(), // Store the calculated amount
+            nights: nights.toString()
         }
 
         if (method === 'stripe') {
@@ -64,12 +136,15 @@ export default async function handler(req, res) {
                 amount,
                 currency: 'eur',
                 metadata: bookingData,
+                description: `Booking for ${nights} nights - Apartment ${apartmentId}`,
             })
 
             return res.status(200).json({
                 provider: 'stripe',
                 clientSecret: paymentIntent.client_secret,
                 paymentId: paymentIntent.id,
+                amount: amount,
+                nights: nights
             })
         }
 
@@ -80,9 +155,9 @@ export default async function handler(req, res) {
             }
 
             const auth = Buffer.from(`${process.env.PP_CLIENT}:${process.env.PP_SECRET}`).toString('base64')
-            
+
             const appUrl = process.env.APP_URL || 'http://localhost:3000';
-            
+
             try {
                 const orderRes = await fetch(`${PAYPAL_BASE}/v2/checkout/orders`, {
                     method: 'POST',
@@ -98,6 +173,7 @@ export default async function handler(req, res) {
                                     currency_code: 'EUR',
                                     value: (amount / 100).toFixed(2),
                                 },
+                                description: `Booking for ${nights} nights - Apartment ${apartmentId}`,
                                 custom_id: JSON.stringify(bookingData),
                             },
                         ],
@@ -111,14 +187,14 @@ export default async function handler(req, res) {
                 if (!orderRes.ok) {
                     const errorText = await orderRes.text();
                     console.error('PayPal API error:', errorText);
-                    
+
                     let errorData = {};
                     try {
                         errorData = JSON.parse(errorText);
                     } catch (e) {
-                        
+                        // Ignore parsing error
                     }
-                    
+
                     const msg = errorData.message || 'PayPal: Order creation failed';
                     return res.status(500).json({ error: msg })
                 }
@@ -133,6 +209,8 @@ export default async function handler(req, res) {
                     provider: 'paypal',
                     paymentId: orderData.id,
                     approvalUrl: approveLink.href,
+                    amount: amount,
+                    nights: nights
                 })
             } catch (paypalError) {
                 console.error('PayPal request error:', paypalError);
