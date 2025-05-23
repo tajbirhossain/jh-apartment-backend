@@ -103,44 +103,56 @@ export default async function handler(req, res) {
         }
         const auth = Buffer.from(`${process.env.PP_CLIENT}:${process.env.PP_SECRET}`).toString('base64')
         const appUrl = process.env.APP_URL || 'http://localhost:3000'
+
+        const orderBody = {
+            intent: 'CAPTURE',
+            purchase_units: [{
+                amount: {
+                    currency_code: 'EUR',
+                    value: (amount / 100).toFixed(2)
+                },
+                custom_id: JSON.stringify(bookingData)
+            }],
+            application_context: {
+                return_url: `${appUrl}/api/paypal-success`,
+                cancel_url: `${appUrl}/booking-cancel`
+            }
+        }
+
+        console.log('[initiate-payment] PayPal request body:', JSON.stringify(orderBody))
+
         const orderRes = await fetch(`${PAYPAL_BASE}/v2/checkout/orders`, {
             method: 'POST',
             headers: {
                 Authorization: `Basic ${auth}`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                intent: 'CAPTURE',
-                purchase_units: [{
-                    amount: {
-                        currency_code: 'EUR',
-                        value: (amount / 100).toFixed(2)
-                    },
-                    custom_id: JSON.stringify(bookingData)
-                }],
-                application_context: {
-                    return_url: `${appUrl}/api/paypal-success`,
-                    cancel_url: `${appUrl}/booking-cancel`
-                }
-            })
+            body: JSON.stringify(orderBody)
         })
+
+        const orderText = await orderRes.text()
         if (!orderRes.ok) {
-            const err = await orderRes.text()
+            console.error('[initiate-payment] PayPal error status:', orderRes.status)
+            console.error('[initiate-payment] PayPal response:', orderText)
             let msg = 'PayPal: Order creation failed'
-            try { msg = JSON.parse(err).message } catch { }
-            return res.status(500).json({ error: msg })
+            try { msg = JSON.parse(orderText).message } catch { }
+            return res.status(400).json({ error: msg })
         }
-        const orderData = await orderRes.json()
-        const link = orderData.links.find(l => l.rel === 'approve')
-        if (!link) {
+
+        const orderData = JSON.parse(orderText)
+        const approveLink = orderData.links.find(l => l.rel === 'approve')
+        if (!approveLink) {
+            console.error('[initiate-payment] Missing approve link in', orderData)
             return res.status(500).json({ error: 'Missing approval link from PayPal' })
         }
+
         return res.status(200).json({
             provider: 'paypal',
             paymentId: orderData.id,
-            approvalUrl: link.href
+            approvalUrl: approveLink.href
         })
     }
+
 
     return res.status(400).json({ error: 'Unknown payment method' })
 }
