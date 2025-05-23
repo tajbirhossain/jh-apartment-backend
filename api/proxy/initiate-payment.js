@@ -47,27 +47,23 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Smoobu API is not configured' })
     }
 
-    const ratesRes = await fetch(
-        `https://login.smoobu.com/api/rates?apartments[]=${apartmentId}` +
-        `&start_date=${arrivalDate}&end_date=${departureDate}`,
-        {
-            headers: {
-                'Api-Key': process.env.SMOOBU_API_TOKEN,
-                'Authorization': `Bearer ${process.env.SMOOBU_API_TOKEN}`
-            }
-        }
-    )
-    if (!ratesRes.ok) {
-        const err = await ratesRes.text()
-        return res.status(500).json({ error: `Smoobu rates error: ${err}` })
+    const priceRes = await fetch('https://login.smoobu.com/api/reservations/price', {
+        method: 'POST',
+        headers: {
+            'Api-Key': process.env.SMOOBU_API_TOKEN,
+            'Authorization': `Bearer ${process.env.SMOOBU_API_TOKEN}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ apartmentId, arrivalDate, departureDate, channel: channelId })
+    });
+    if (!priceRes.ok) {
+        const err = await priceRes.text();
+        return res.status(500).json({ error: `Smoobu pricing error: ${err}` });
     }
-
-    const ratesData = await ratesRes.json()
-    const days = ratesData[apartmentId] || []
-    const totalPrice = days.reduce((sum, d) => sum + Number(d.price || 0), 0)
-    const amount = Math.round(totalPrice * 100)
+    const { totalPrice } = await priceRes.json();
+    const amount = Math.round(Number(totalPrice) * 100);
     if (amount <= 0) {
-        return res.status(400).json({ error: 'Ungültiger Gesamtpreis' })
+        return res.status(400).json({ error: 'Ungültiger Gesamtpreis' });
     }
 
     const bookingData = {
