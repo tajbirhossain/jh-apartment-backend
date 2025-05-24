@@ -58,8 +58,11 @@ async function createSmoobuBooking(b) {
         channel: { id: parseInt(b.channelId || '70') },
         guest: { firstName: b.firstName, lastName: b.lastName, email: b.email, phone: b.phone },
         notice: `Online booking - Payment confirmed`,
-        price: parseFloat(b.totalAmount) / 100
+        price: Math.round((parseFloat(b.totalAmount) / 100) * 100) / 100
     }
+
+    console.log('Smoobu booking payload:', JSON.stringify(payload, null, 2))
+
     const res = await fetch('https://login.smoobu.com/api/reservations', {
         method: 'POST',
         headers: {
@@ -69,14 +72,17 @@ async function createSmoobuBooking(b) {
         },
         body: JSON.stringify(payload)
     })
-    if (!res.ok) {
-        const txt = await res.text()
-        throw new Error(txt || 'Smoobu error')
-    }
-    const data = await res.json()
+
+    const txt = await res.text()
+    console.log('Smoobu response:', txt)
+
+    if (!res.ok) throw new Error(txt || 'Smoobu error')
+
+    const data = JSON.parse(txt)
     if (!data.id) throw new Error(data.message || 'Reservation failed')
     return data
 }
+
 
 export default async function handler(req, res) {
     if (handleCors(req, res)) return
@@ -129,15 +135,10 @@ export default async function handler(req, res) {
     }
 
     try {
-        // const reservation = await createSmoobuBooking(bookingData)
-        // return res.status(200).json({
-        //     success: true,
-        //     reservationId: reservation.id,
-        //     message: 'Booking confirmed successfully'
-        // })
+        const reservation = await createSmoobuBooking(bookingData)
         return res.status(200).json({
             success: true,
-            reservationId: 'mock-id',
+            reservationId: reservation.id,
             message: 'Booking confirmed successfully'
         })
     } catch (e) {
