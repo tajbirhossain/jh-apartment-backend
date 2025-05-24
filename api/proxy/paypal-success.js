@@ -28,7 +28,6 @@ export default async function handler(req, res) {
     }
 
     try {
-        // Call the finalize-booking endpoint to complete the booking
         const baseUrl = process.env.APP_URL || 'http://localhost:3000';
         const finalizeRes = await fetch(`${baseUrl}/api/proxy/finalize-booking`, {
             method: 'POST',
@@ -44,11 +43,9 @@ export default async function handler(req, res) {
         const finalizeData = await finalizeRes.json();
 
         if (finalizeData.success) {
-            // Redirect to success page with reservation ID
             const successUrl = `${baseUrl}/booking-success?reservationId=${finalizeData.reservationId}`;
             return res.redirect(302, successUrl);
         } else {
-            // Redirect to error page with error message
             const errorUrl = `${baseUrl}/booking-error?error=${encodeURIComponent(finalizeData.error)}`;
             return res.redirect(302, errorUrl);
         }
