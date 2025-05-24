@@ -50,14 +50,12 @@ async function getSmoobuPrice(apartmentId, arrivalDate, departureDate, adults, c
 
         let totalPrice = 0;
 
-        // Handle the new response structure: { prices: { '2514433': { price: 206, currency: '€' } } }
         if (priceData.prices && typeof priceData.prices === 'object') {
             const apartmentPrice = priceData.prices[apartmentId.toString()];
             if (apartmentPrice && apartmentPrice.price) {
                 totalPrice = parseFloat(apartmentPrice.price);
             }
         }
-        // Fallback to original price extraction methods
         else if (priceData.price) {
             totalPrice = parseFloat(priceData.price);
         } else if (priceData.totalPrice) {
@@ -146,15 +144,14 @@ export default async function handler(req, res) {
                 amount,
                 currency: 'eur',
                 metadata: bookingData,
-                description: `Booking for ${nights} nights - Apartment ${apartmentId}`,
+                description: `Booking - Apartment ${apartmentId}`,
             })
 
             return res.status(200).json({
                 provider: 'stripe',
                 clientSecret: paymentIntent.client_secret,
                 paymentId: paymentIntent.id,
-                amount: amount,
-                nights: nights
+                amount: amount
             })
         }
 
@@ -165,7 +162,6 @@ export default async function handler(req, res) {
             }
 
             const auth = Buffer.from(`${process.env.PP_CLIENT}:${process.env.PP_SECRET}`).toString('base64')
-
             const appUrl = process.env.APP_URL || 'http://localhost:3000';
 
             try {
@@ -183,8 +179,8 @@ export default async function handler(req, res) {
                                     currency_code: 'EUR',
                                     value: (amount / 100).toFixed(2),
                                 },
-                                description: `Booking for ${nights} nights - Apartment ${apartmentId}`,
-                                custom_id: JSON.stringify(bookingData),
+                                description: `Booking - Apartment ${apartmentId}`,
+                                custom_id: `${apartmentId}-${Date.now()}`,
                             },
                         ],
                         application_context: {
@@ -202,7 +198,7 @@ export default async function handler(req, res) {
                     try {
                         errorData = JSON.parse(errorText);
                     } catch (e) {
-                        // Ignore parsing error
+
                     }
 
                     const msg = errorData.message || 'PayPal: Order creation failed';
@@ -219,8 +215,7 @@ export default async function handler(req, res) {
                     provider: 'paypal',
                     paymentId: orderData.id,
                     approvalUrl: approveLink.href,
-                    amount: amount,
-                    nights: nights
+                    amount: amount
                 })
             } catch (paypalError) {
                 console.error('PayPal request error:', paypalError);
