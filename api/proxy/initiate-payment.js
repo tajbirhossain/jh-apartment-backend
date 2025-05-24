@@ -80,10 +80,10 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Missing required booking data' })
     }
 
-    const nights = Math.ceil((new Date(departureDate) - new Date(arrivalDate)) / 86400000)
-    if (nights <= 0) {
-        return res.status(400).json({ error: 'Invalid date range' })
-    }
+    // const nights = Math.ceil((new Date(departureDate) - new Date(arrivalDate)) / 86400000)
+    // if (nights <= 0) {
+    //     return res.status(400).json({ error: 'Invalid date range' })
+    // }
 
     let amount
     try {
@@ -108,7 +108,7 @@ export default async function handler(req, res) {
         phone,
         channelId: channelId ? channelId.toString() : '70',
         totalAmount: amount.toString(),
-        nights: nights.toString()
+        // nights: nights.toString()
     }
 
     if (method === 'stripe') {
