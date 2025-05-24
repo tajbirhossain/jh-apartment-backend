@@ -22,10 +22,8 @@ const PAYPAL_BASE =
         ? 'https://api.paypal.com'
         : 'https://api.sandbox.paypal.com'
 
-// Function to get price from Smoobu using the same API as frontend
 async function getSmoobuPrice(apartmentId, arrivalDate, departureDate, adults, children) {
     try {
-        // Use the same check-availability endpoint as the frontend
         const baseUrl = process.env.APP_URL || 'http://localhost:3000';
         const priceRes = await fetch(`${baseUrl}/api/proxy/check-availability`, {
             method: 'POST',
@@ -35,7 +33,7 @@ async function getSmoobuPrice(apartmentId, arrivalDate, departureDate, adults, c
             body: JSON.stringify({
                 arrivalDate: arrivalDate,
                 departureDate: departureDate,
-                apartments: apartmentId.toString(), // Send specific apartment ID
+                apartments: apartmentId.toString(),
                 guests: adults + children,
                 customerId: 981908
             })
@@ -50,19 +48,21 @@ async function getSmoobuPrice(apartmentId, arrivalDate, departureDate, adults, c
         const priceData = await priceRes.json();
         console.log('Price data received:', priceData);
 
-        // Extract the total price from the response
-        // Adjust this based on your check-availability API response structure
         let totalPrice = 0;
 
-        // The response structure may vary, so let's handle common formats
-        if (priceData.price) {
+        if (priceData.prices && typeof priceData.prices === 'object') {
+            const apartmentPrice = priceData.prices[apartmentId.toString()];
+            if (apartmentPrice && apartmentPrice.price) {
+                totalPrice = parseFloat(apartmentPrice.price);
+            }
+        }
+        else if (priceData.price) {
             totalPrice = parseFloat(priceData.price);
         } else if (priceData.totalPrice) {
             totalPrice = parseFloat(priceData.totalPrice);
         } else if (priceData.data && priceData.data.price) {
             totalPrice = parseFloat(priceData.data.price);
         } else if (priceData.apartments && Array.isArray(priceData.apartments)) {
-            // If apartments array is returned, find the specific apartment
             const apartment = priceData.apartments.find(apt =>
                 apt.id == apartmentId || apt.apartmentId == apartmentId
             );
@@ -76,7 +76,6 @@ async function getSmoobuPrice(apartmentId, arrivalDate, departureDate, adults, c
             throw new Error('Invalid price received from availability API');
         }
 
-        // Convert to cents (assuming the API returns price in euros)
         return Math.round(totalPrice * 100);
 
     } catch (error) {
@@ -96,13 +95,11 @@ export default async function handler(req, res) {
             apartmentId, firstName, lastName, email, phone, channelId
         } = req.body
 
-        // Validate required fields
         if (!method || !arrivalDate || !departureDate || typeof adults !== 'number' ||
             !apartmentId || !firstName || !lastName || !email || !phone) {
             return res.status(400).json({ error: 'Missing required booking data' })
         }
 
-        // Validate dates
         const arrival = new Date(arrivalDate)
         const departure = new Date(departureDate)
         const nights = Math.ceil((departure - arrival) / 86400000)
@@ -111,7 +108,6 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Invalid date range' })
         }
 
-        // Get actual price from Smoobu
         let amount
         try {
             amount = await getSmoobuPrice(apartmentId, arrivalDate, departureDate, adults, children)
@@ -124,7 +120,6 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Invalid total price' })
         }
 
-        // Store all booking data for later use
         const bookingData = {
             arrivalDate,
             departureDate,
@@ -135,8 +130,8 @@ export default async function handler(req, res) {
             lastName,
             email,
             phone,
-            channelId: channelId ? channelId.toString() : '70', // Default to 70 if not provided
-            totalAmount: amount.toString(), // Store the calculated amount
+            channelId: channelId ? channelId.toString() : '70',
+            totalAmount: amount.toString(),
             nights: nights.toString()
         }
 
