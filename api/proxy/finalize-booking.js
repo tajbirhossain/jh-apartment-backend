@@ -129,10 +129,15 @@ export default async function handler(req, res) {
     }
 
     try {
-        const reservation = await createSmoobuBooking(bookingData)
+        // const reservation = await createSmoobuBooking(bookingData)
+        // return res.status(200).json({
+        //     success: true,
+        //     reservationId: reservation.id,
+        //     message: 'Booking confirmed successfully'
+        // })
         return res.status(200).json({
             success: true,
-            reservationId: reservation.id,
+            reservationId: 'mock-id',
             message: 'Booking confirmed successfully'
         })
     } catch (e) {
