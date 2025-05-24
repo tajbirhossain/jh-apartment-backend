@@ -50,12 +50,14 @@ async function getSmoobuPrice(apartmentId, arrivalDate, departureDate, adults, c
 
         let totalPrice = 0;
 
+        // Handle the new response structure: { prices: { '2514433': { price: 206, currency: '€' } } }
         if (priceData.prices && typeof priceData.prices === 'object') {
             const apartmentPrice = priceData.prices[apartmentId.toString()];
             if (apartmentPrice && apartmentPrice.price) {
                 totalPrice = parseFloat(apartmentPrice.price);
             }
         }
+        // Fallback to original price extraction methods
         else if (priceData.price) {
             totalPrice = parseFloat(priceData.price);
         } else if (priceData.totalPrice) {
