@@ -50,16 +50,20 @@ async function getSmoobuPrice(apartmentId, arrival, departure, adults, children)
 
 async function createSmoobuBooking(b) {
     const payload = {
-        apartment: { id: parseInt(b.apartmentId) },
-        arrival: b.arrivalDate,
-        departure: b.departureDate,
+        apartmentId: parseInt(b.apartmentId),
+        arrivalDate: b.arrivalDate,
+        departureDate: b.departureDate,
         adults: parseInt(b.adults),
         children: parseInt(b.children || '0'),
-        channel: { id: parseInt(b.channelId || '70') },
-        guest: { firstName: b.firstName, lastName: b.lastName, email: b.email, phone: b.phone },
+        channelId: parseInt(b.channelId || '70'),
+        firstName: b.firstName,
+        lastName: b.lastName,
+        email: b.email,
+        phone: b.phone,
         notice: `Online booking - Payment confirmed`,
-        price: Math.round((parseFloat(b.totalAmount) / 100) * 100) / 100
+        price: parseFloat(b.totalAmount) / 100
     }
+
 
     console.log('Smoobu booking payload:', JSON.stringify(payload, null, 2))
 
